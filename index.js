@@ -82,9 +82,10 @@ app.get("/auth/:provider/callback", async (req, res) => {
 
     const userInfo = providerConfig.getUserInfo(userRes.data);
 
-    const redirectToApp = `com.exposocialauth.app:/oauthredirect?userInfo=${encodeURIComponent(
-      JSON.stringify(userInfo)
-    )}`;
+    // const redirectToApp = `com.exposocialauth.app:/oauthredirect?userInfo=${encodeURIComponent(
+    //   JSON.stringify(userInfo)
+    // )}`;
+    const redirectToApp = `com.exposocialauth.app:`;
 
     console.log("🔁 Redirecting to:", redirectToApp);
     res.redirect(redirectToApp);
