@@ -56,36 +56,36 @@ app.get("/auth/:provider/callback", async (req, res) => {
       return res.status(400).send("Unsupported provider");
     }
 
-    // const params = new URLSearchParams({
-    //   code,
-    //   client_id: providerConfig.client_id,
-    //   client_secret: providerConfig.client_secret,
-    //   redirect_uri: providerConfig.redirect_uri,
-    //   grant_type: "authorization_code",
-    //   ...providerConfig.extraParams,
-    // });
+    const params = new URLSearchParams({
+      code,
+      client_id: providerConfig.client_id,
+      client_secret: providerConfig.client_secret,
+      redirect_uri: providerConfig.redirect_uri,
+      grant_type: "authorization_code",
+      ...providerConfig.extraParams,
+    });
 
-    // const tokenRes = await axios.post(providerConfig.token_url, params, {
-    //   headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    // });
+    const tokenRes = await axios.post(providerConfig.token_url, params, {
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    });
 
-    // const accessToken = tokenRes.data.access_token;
+    const accessToken = tokenRes.data.access_token;
 
-    // const userRes = await axios.get(providerConfig.user_url, {
-    //   headers: {
-    //     Authorization: `Bearer ${accessToken}`,
-    //     ...(provider === "twitch"
-    //       ? { "Client-ID": providerConfig.client_id }
-    //       : {}),
-    //   },
-    // });
+    const userRes = await axios.get(providerConfig.user_url, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        ...(provider === "twitch"
+          ? { "Client-ID": providerConfig.client_id }
+          : {}),
+      },
+    });
 
-    // const userInfo = providerConfig.getUserInfo(userRes.data);
+    const userInfo = providerConfig.getUserInfo(userRes.data);
 
-    // const redirectToApp = `com.exposocialauth.app:/oauthredirect?userInfo=${encodeURIComponent(
-    //   JSON.stringify(userInfo)
-    // )}`;
-    const redirectToApp = `com.exposocialauth.app:`;
+    const redirectToApp = `com.exposocialauth.app:/oauthredirect?userInfo=${encodeURIComponent(
+      JSON.stringify(userInfo)
+    )}`;
+    // const redirectToApp = `com.exposocialauth.app:`;
 
     console.log("🔁 Redirecting to:", redirectToApp);
     res.redirect(redirectToApp);
