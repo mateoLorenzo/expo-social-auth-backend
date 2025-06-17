@@ -13,132 +13,84 @@ app.get("/", (req, res) => {
   res.send("OAuth backend running!");
 });
 
-app.get("/auth/google/callback", async (req, res) => {
+app.get("/auth/:provider/callback", async (req, res) => {
+  const { provider } = req.params;
   const code = req.query.code;
+
   if (!code) return res.status(400).send("Missing code");
 
   try {
-    const params = new URLSearchParams();
-    params.append("code", code);
-    params.append("client_id", process.env.GOOGLE_CLIENT_ID);
-    params.append("client_secret", process.env.GOOGLE_CLIENT_SECRET);
-    params.append("redirect_uri", process.env.GOOGLE_REDIRECT_URI);
-    params.append("grant_type", "authorization_code");
+    const config = {
+      google: {
+        client_id: process.env.GOOGLE_CLIENT_ID,
+        client_secret: process.env.GOOGLE_CLIENT_SECRET,
+        token_url: "https://oauth2.googleapis.com/token",
+        user_url: "https://www.googleapis.com/oauth2/v3/userinfo",
+        redirect_uri: process.env.GOOGLE_REDIRECT_URI,
+        extraParams: {},
+        getUserInfo: (data) => data,
+      },
+      discord: {
+        client_id: process.env.DISCORD_CLIENT_ID,
+        client_secret: process.env.DISCORD_CLIENT_SECRET,
+        token_url: "https://discord.com/api/oauth2/token",
+        user_url: "https://discord.com/api/users/@me",
+        redirect_uri: process.env.DISCORD_REDIRECT_URI,
+        extraParams: { scope: "identify email" },
+        getUserInfo: (data) => data,
+      },
+      twitch: {
+        client_id: process.env.TWITCH_CLIENT_ID,
+        client_secret: process.env.TWITCH_CLIENT_SECRET,
+        token_url: "https://id.twitch.tv/oauth2/token",
+        user_url: "https://api.twitch.tv/helix/users",
+        redirect_uri: process.env.TWITCH_REDIRECT_URI,
+        extraParams: {},
+        getUserInfo: (data) => data.data[0],
+      },
+    };
 
-    const tokenRes = await axios.post(
-      "https://oauth2.googleapis.com/token",
-      params
-    );
+    const providerConfig = config[provider];
 
-    const accessToken = tokenRes.data.access_token;
+    if (!providerConfig) {
+      return res.status(400).send("Unsupported provider");
+    }
 
-    const userRes = await axios.get(
-      "https://www.googleapis.com/oauth2/v3/userinfo",
-      {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-      }
-    );
+    const params = new URLSearchParams({
+      code,
+      client_id: providerConfig.client_id,
+      client_secret: providerConfig.client_secret,
+      redirect_uri: providerConfig.redirect_uri,
+      grant_type: "authorization_code",
+      ...providerConfig.extraParams,
+    });
 
-    const userInfo = userRes.data;
-
-    // Redirigimos a la app móvil con los datos
-    res.redirect(
-      `com.exposocialauth.app://oauthredirect?userInfo=${encodeURIComponent(
-        JSON.stringify(userInfo)
-      )}`
-    );
-  } catch (err) {
-    console.error(err.response?.data || err.message);
-    res.status(500).send("Error handling Google OAuth");
-  }
-});
-
-app.get("/auth/discord/callback", async (req, res) => {
-  const code = req.query.code;
-  console.log("code", code);
-  if (!code) return res.status(400).send("Missing code");
-
-  try {
-    const params = new URLSearchParams();
-    params.append("client_id", process.env.DISCORD_CLIENT_ID);
-    params.append("client_secret", process.env.DISCORD_CLIENT_SECRET);
-    params.append("grant_type", "authorization_code");
-    params.append("code", code);
-    params.append("redirect_uri", process.env.DISCORD_REDIRECT_URI);
-    params.append("scope", "identify email");
-
-    console.log("params from back", params);
-
-    const tokenRes = await axios.post(
-      "https://discord.com/api/oauth2/token",
-      params,
-      {
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      }
-    );
+    const tokenRes = await axios.post(providerConfig.token_url, params, {
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    });
 
     const accessToken = tokenRes.data.access_token;
 
-    const userRes = await axios.get("https://discord.com/api/users/@me", {
+    const userRes = await axios.get(providerConfig.user_url, {
       headers: {
         Authorization: `Bearer ${accessToken}`,
+        ...(provider === "twitch"
+          ? { "Client-ID": providerConfig.client_id }
+          : {}),
       },
     });
 
-    const userInfo = userRes.data;
+    const userInfo = providerConfig.getUserInfo(userRes.data);
 
-    // Redirigir de vuelta a la app con los datos del usuario (puede ser en querystring, token, etc.)
-    res.redirect(
-      `com.exposocialauth.app://oauthredirect?userInfo=${encodeURIComponent(
-        JSON.stringify(userInfo)
-      )}`
-    );
+    const redirectToApp = `com.exposocialauth.app://oauthredirect?userInfo=${encodeURIComponent(
+      JSON.stringify(userInfo)
+    )}`;
+
+    console.log("🔁 Redirecting to:", redirectToApp);
+    res.redirect(redirectToApp);
   } catch (err) {
-    console.error(err.response?.data || err.message);
-    res.status(500).send("Error handling Discord OAuth");
-  }
-});
-
-app.get("/auth/twitch/callback", async (req, res) => {
-  const code = req.query.code;
-  if (!code) return res.status(400).send("Missing code");
-
-  try {
-    const params = new URLSearchParams();
-    params.append("client_id", process.env.TWITCH_CLIENT_ID);
-    params.append("client_secret", process.env.TWITCH_CLIENT_SECRET);
-    params.append("code", code);
-    params.append("grant_type", "authorization_code");
-    params.append("redirect_uri", process.env.TWITCH_REDIRECT_URI);
-
-    console.log("params from back twitch", params);
-
-    const tokenRes = await axios.post(
-      "https://id.twitch.tv/oauth2/token",
-      params
-    );
-
-    const accessToken = tokenRes.data.access_token;
-
-    const userRes = await axios.get("https://api.twitch.tv/helix/users", {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        "Client-ID": process.env.TWITCH_CLIENT_ID,
-      },
-    });
-
-    const userInfo = userRes.data.data[0];
-
-    res.redirect(
-      `com.exposocialauth.app://oauthredirect?userInfo=${encodeURIComponent(
-        JSON.stringify(userInfo)
-      )}`
-    );
-  } catch (err) {
-    console.error(err.response?.data || err.message);
-    res.status(500).send("Error handling Twitch OAuth");
+    console.error("❌ Error:", err.response?.data || err.message);
+    res.status(500).send(`Error handling ${req.params.provider} OAuth`);
   }
 });
 
